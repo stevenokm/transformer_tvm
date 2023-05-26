@@ -1,6 +1,9 @@
 #!/bin/bash
 # unset CUDA_VISIBLE_DEVICES
-CUDA_VISIBLE_DEVICES="" # CPU only
+# CUDA_VISIBLE_DEVICES="" # CPU only
+CUDA_VISIBLE_DEVICES="1,2,3"
+# fix for OOM
+PYTORCH_CUDA_ALLOC_CONF=""
 
 epoch_time=$(date +%s)
 time_cmd="/usr/bin/time"
