@@ -27,9 +27,7 @@ log(str(start_time))
 
 log("setup model")
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "databricks/dolly-v2-7b", padding_side="left"
-)
+tokenizer = AutoTokenizer.from_pretrained("databricks/dolly-v2-7b", padding_side="left")
 model = AutoModelForCausalLM.from_pretrained(
     "databricks/dolly-v2-7b", device_map="auto", torch_dtype=torch.bfloat16
 )
