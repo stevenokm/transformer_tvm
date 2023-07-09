@@ -23,6 +23,7 @@ from accelerate import (
     infer_auto_device_map,
     load_checkpoint_and_dispatch,
 )
+import ecco
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_model", default="dolly-v2-3b")
@@ -98,6 +99,25 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 log("device_map: {}".format(model.hf_device_map))
 
+model_config = {
+    "embedding": "gpt_neox.embed_in",
+    "type": "causal",
+    "activations": ["mlp\.dense_h_to_4h"],  # This is a regex
+    "token_prefix": "",
+    "partial_token_prefix": "",
+}
+
+ecco_model = ecco.from_pretrained(
+    model_path_or_name, activations=True, model_config=model_config
+)
+
+text = """ Now I ask you: \n what can be expected of man since he is a being endowed with strange qualities? Shower upon him every earthly blessing, drown him in a sea of happiness, so that nothing but bubbles of bliss can be seen on the surface; give him economic prosperity, such that he should have nothing else to do but sleep, eat cakes and busy himself with the continuation of his species, and even then out of sheer ingratitude, sheer spite, man would play you some nasty trick. He would even risk his cakes and would deliberately desire the most fatal rubbish, the most uneconomical absurdity, simply to introduce into all this positive good sense his fatal fantastic element. It is just his fantastic dreams, his vulgar folly that he will desire to retain, simply in order to prove to himself--as though that were so necessary-- that men still are men and not the keys of a piano, which the laws of nature threaten to control so completely that soon one will be able to desire nothing but by the calendar. And that is not all: even if man really were nothing but a piano-key, even if this were proved to him by natural science and mathematics, even then he would not become reasonable, but would purposely do something perverse out of simple ingratitude, simply to gain his point. And if he does not find means he will contrive destruction and chaos, will contrive sufferings of all sorts, only to gain his point! He will launch a curse upon the world, and as only man can curse (it is his privilege, the primary distinction between him and other animals), may be by his curse alone he will attain his object--that is, convince himself that he is a man and not a piano-key!
+"""
+
+inputs = ecco_model.tokenizer([text], return_tensors="pt")
+output = ecco_model(inputs)
+
+nmf_1 = output.run_nmf(n_components=8) 
 
 # ref: https://blog.paperspace.com/pytorch-hooks-gradient-clipping-debugging/
 
@@ -134,6 +154,7 @@ def get_all_layers(net, parent_name=""):
 
 
 get_all_layers(model)
+model.train()
 
 # end ref
 
@@ -178,6 +199,13 @@ res = []
 for text_id in tqdm(range(0, len(query), batch_size)):
     end = min(text_id + batch_size, len(query))
     res.extend(generate_text(query[text_id:end]))
+    # for name, param in model.named_parameters():
+    #     if param.requires_grad:
+    #         if param.grad is None:
+    #             continue
+    #         log("name: {}, shape: {}".format(name, param.grad.shape))
+    #         current_tensor_list = visualisation_grad.setdefault(name, [])
+    #         current_tensor_list.append(param.grad.clone().detach().cpu().numpy())
 
 log_time("generate text")
 log("")
@@ -207,9 +235,7 @@ for text_id in range(len(query)):
 
     for name, param in model.named_parameters():
         if param.requires_grad:
-            log("name: {}, shape: {}".format(name, param.shape))
-            # TODO: no grad, need to torch.backward()
-            visualisation_grad[name] = param.grad
+            log("name: {}, shape: {}".format(name, param.grad.shape))
 
     log_time("gradients text id: {}".format(text_id))
 

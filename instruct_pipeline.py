@@ -146,6 +146,8 @@ class InstructionTextGenerationPipeline(Pipeline):
         else:
             in_b = input_ids.shape[0]
 
+        # NOTE: torch.no_grad() is removed in transformers.generation.utils.GenerationMixin.generate()
+        # and add backward() support on sample() method.
         generated_sequence = self.model.generate(
             input_ids=input_ids.to(self.model.device),
             attention_mask=attention_mask.to(self.model.device)
