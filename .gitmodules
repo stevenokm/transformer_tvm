@@ -1,3 +1,6 @@
-[submodule "transformers"]
-path = transformers.git
-url = git://git@github.com:stevenokm/transformers.git
+[submodule "ecco.git"]
+	path = ecco.git
+	url = git@github.com:stevenokm/ecco.git
+[submodule "transformers.git"]
+	path = transformers.git
+	url = git@github.com:stevenokm/transformers.git
