@@ -1,7 +1,13 @@
 #!/bin/bash -e
+
+# import .env
+set -a
+source .env
+set +a
+
 # unset CUDA_VISIBLE_DEVICES
 # CUDA_VISIBLE_DEVICES="" # CPU only
-CUDA_VISIBLE_DEVICES="3,2"
+CUDA_VISIBLE_DEVICES="0,1"
 # fix for OOM
 # PYTORCH_CUDA_ALLOC_CONF="backend:native,max_split_size_mb:10000"
 
@@ -12,10 +18,14 @@ time_cmd="/usr/bin/time"
 
 # exec ${time_cmd} -v python3 dolly-v2-7b.py ${epoch_time} 2>&1 | tee dolly-v2-7b_${epoch_time}.log
 
-exec ${time_cmd} -v \
-    python3 dolly-v2-3b.py \
-    --input_model ~/dbfs/dolly_training/dolly__2023-06-05T00\:49\:05 \
-    --timestamp ${epoch_time} 2>&1 | tee dolly-v2-3b_${epoch_time}.log
-python3 analyze_act.py \
+# exec ${time_cmd} -v \
+#     python3 dolly-v2-3b.py \
+#     --input_model ~/dbfs/dolly_training/dolly__2023-06-05T00\:49\:05 \
+#     --timestamp ${epoch_time}
+# python3 analyze_act.py \
+#     --input_model dolly-v2-3b \
+#     --timestamp ${epoch_time}
+
+python3 dolly-v2-3b.py \
     --input_model dolly-v2-3b \
-    --timestamp ${epoch_time} 2>&1 | tee -a dolly-v2-3b_${epoch_time}.log
+    --timestamp ${epoch_time}

@@ -165,3 +165,9 @@ tags*
 
 *.plk
 *.csv
+*.tsv
+
+*.pt
+*.json
+*.bin
+*.ro
