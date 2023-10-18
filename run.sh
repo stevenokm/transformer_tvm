@@ -7,7 +7,7 @@ set +a
 
 # unset CUDA_VISIBLE_DEVICES
 # CUDA_VISIBLE_DEVICES="" # CPU only
-CUDA_VISIBLE_DEVICES="0,1"
+CUDA_VISIBLE_DEVICES="1"
 # fix for OOM
 # PYTORCH_CUDA_ALLOC_CONF="backend:native,max_split_size_mb:10000"
 

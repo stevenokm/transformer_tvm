@@ -112,7 +112,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 # device_map = "auto"
 device_map = None
 
-# load model in 8bit mode for GTX 1080Ti & RTX 2080Ti
 model = AutoModelForCausalLM.from_pretrained(
     model_path_or_name,
     torch_dtype=torch.float32,
@@ -194,7 +193,9 @@ batch_size = 2
 sequence_size = 128
 layout = "NL"
 dtype = "float32"
-target = tvm.target.Target("cuda")
+target = tvm.target.Target(
+    "cuda -arch=sm_86"
+)  # NOTE: for RTX 3090 or later, reffer to https://developer.nvidia.com/cuda-gpus
 log_file = "%s-%s-B%d-%s.json" % (network, layout, batch_size, target.kind.name)
 mod_file = "%s-%s-B%d-%s-mod.json" % (network, layout, batch_size, dtype)
 params_file = "%s-%s-B%d-%s-params.bin" % (network, layout, batch_size, dtype)
@@ -215,9 +216,6 @@ if batch_size > 1:
 dummy_inputs = [model_inputs[input_name] for input_name in input_names]
 batch_size = model_inputs["input_ids"].shape[0]
 sequence_size = model_inputs["input_ids"].shape[1]
-
-# for key in input_names:
-#     model_inputs[key].requires_grad = False
 
 # trace model
 for para in model.parameters():
@@ -261,12 +259,10 @@ else:
     with open(params_file, "wb") as f:
         f.write(relay.save_param_dict(params))
 
-# TODO: quantize model, or CUDA OOM
-# ref: https://tvm.apache.org/docs/how_to/deploy_models/deploy_quantized.html
-
 del scripted_model
 gc.collect()
 
+# perform auto-scheduler
 if os.path.exists(log_file):
     logging.info("Load log file...")
 else:
@@ -287,14 +283,14 @@ else:
 
         tuner = auto_scheduler.TaskScheduler(tasks, task_weights)
         tune_option = auto_scheduler.TuningOptions(
-            num_measure_trials=20000,  # change this to 20000 to achieve the best performance
+            num_measure_trials=200,  # change this to 20000 to achieve the best performance
             runner=measure_ctx.runner,
             measure_callbacks=[auto_scheduler.RecordToFile(log_file)],
         )
 
         tuner.tune(tune_option)
 
-    # run_tuning()
+    run_tuning()
 
     del tasks
     del task_weights
@@ -309,6 +305,7 @@ if os.path.exists(vmc_lib_file) and os.path.exists(vmc_code_file):
     vmc = runtime.vm.Executable.load_exec(code, lib)
 else:
     logging.info("Compile...")
+    # NOTE: NEED CPU MEMORY + SWAP >= 150GB, or segmentation fault
     with auto_scheduler.ApplyHistoryBest(log_file):
         with tvm.transform.PassContext(
             opt_level=3, config={"relay.backend.use_auto_scheduler": True}
@@ -333,6 +330,7 @@ for input_name in input_names:
     input_data[input_name] = tvm.nd.array(
         model_inputs[input_name].numpy().astype(dtype)
     )
+# NOTE: NEED GPU MEMORY >= 22GB, or CUDA OOM
 vm.set_input(
     main_name,
     **input_data,
@@ -341,6 +339,7 @@ vm.set_input(
 # Evaluate
 logging.info("Evaluate inference time cost...")
 logging.info(str(vm.benchmark(dev, repeat=3, min_repeat_ms=500)))
+# NOTE: if the program has error, then remove log_file, vmc files and re-run codes start from auto-scheduler
 
 exit()
 

@@ -1,5 +1,11 @@
+if [ ! -d "./.venv" ]; then
+    echo "please create virtual environment with python3.8 "
+    echo "cmd: python3.8 -m venv .venv; source .venv/bin/activate"
+    exit 1
+fi
 # pytorch
-pip3 install torch==2.0.1+cu117 torchvision==0.15.2+cu117 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu117 # torch 2.0.1 @ cu117
+# pip3 install torch==2.0.1+cu117 torchvision==0.15.2+cu117 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu117 # torch 2.0.1 @ cu117
+pip3 install torch==2.0.0+cu117 torchvision==0.15.1+cu117 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu117 # torch 2.0.0 @ cu117
 # pip3 install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113 # torch 1.12 @ cu113
 
 # huggingface
@@ -28,11 +34,11 @@ fi
 # ln -s python3.8/site-packages/nvidia/cudnn ./.venv/lib/cudnn
 cd ./.venv/lib/tvm
 git checkout v0.13.0
-if [ ! -d "./.venv/lib/tvm/build-release" ]; then
-    mkdir build-release
+if [ ! -d "./build-release" ]; then
+    mkdir ./build-release
 fi
-if [ ! -d "./.venv/lib/tvm/build-debug" ]; then
-    mkdir build-debug
+if [ ! -d "./build-debug" ]; then
+    mkdir ./build-debug
 fi
 
 # NOTE: set(USE_LLVM ON) for CPU, set(USE_CUDA) for GPU
@@ -41,41 +47,53 @@ fi
 # NOTE: set(USE_PAPI ON) for detail profiling
 # NOTE: set(USE_RELAY_DEBUG ON) for debug
 
-cd build-debug/
-cmake .. \
-    -DUSE_CUDA=ON \
-    -DUSE_GRAPH_EXECUTOR_CUDA_GRAPH=ON \
-    -DUSE_LLVM=/usr/bin/llvm-config-10 \
-    -DUSE_OPENMP=none \
-    -DUSE_CUDNN=ON \
-    -DUSE_CUBLAS=ON \
-    -DUSE_RELAY_DEBUG=ON \
-    -DUSE_CURAND=ON \
-    -DUSE_CUTLASS=ON \
-    -DSUMMARIZE=ON \
-    -DUSE_KALLOC_ALIGNMENT=64 \
-    -DCMAKE_CUDA_ARCHITECTURES=61
-# TODO: for GTX 1080, reffer to https://developer.nvidia.com/cuda-gpus
-cd ..
+function set_cmake_config {
+    var_name=$1
+    var_value=$2
+    conf_file=$3
+    echo "set(${var_name} ${var_value})" >>${conf_file}
+}
+
+# import default config.cmake
+source ../../../config_cmake.bash
+
 cd build-release/
+config_cmake_dict["USE_CUDA"]="ON"
+config_cmake_dict["USE_GRAPH_EXECUTOR_CUDA_GRAPH"]="ON"
+config_cmake_dict["USE_LLVM"]="/usr/bin/llvm-config-10"
+config_cmake_dict["USE_CUDNN"]="ON"
+config_cmake_dict["USE_CUBLAS"]="ON"
+config_cmake_dict["USE_CURAND"]="ON"
+config_cmake_dict["USE_CUTLASS"]="ON"
+config_cmake_dict["SUMMARIZE"]="ON"
+if [ ! -f "config.cmake" ]; then
+    for key in "${!config_cmake_dict[@]}"; do
+        set_cmake_config "${key}" "${config_cmake_dict[${key}]}" "config.cmake"
+    done
+fi
 cmake .. \
-    -DUSE_CUDA=ON \
-    -DUSE_GRAPH_EXECUTOR_CUDA_GRAPH=ON \
-    -DUSE_LLVM=/usr/bin/llvm-config-10 \
-    -DUSE_OPENMP=none \
-    -DUSE_CUDNN=ON \
-    -DUSE_CUBLAS=ON \
-    -DUSE_CURAND=ON \
-    -DUSE_CUTLASS=ON \
-    -DSUMMARIZE=ON \
-    -DUSE_KALLOC_ALIGNMENT=64 \
-    -DCMAKE_CUDA_ARCHITECTURES=61
-# TODO: for GTX 1080, reffer to https://developer.nvidia.com/cuda-gpus
+    -DCMAKE_CUDA_ARCHITECTURES=86
+# NOTE: for RTX 3090 or later, reffer to https://developer.nvidia.com/cuda-gpus
+cd ..
+cd build-debug/
+config_cmake_dict["USE_RELAY_DEBUG"]="ON"
+if [ ! -f "config.cmake" ]; then
+    for key in "${!config_cmake_dict[@]}"; do
+        set_cmake_config "${key}" "${config_cmake_dict[${key}]}" "config.cmake"
+    done
+fi
+cmake .. \
+    -DCMAKE_CUDA_ARCHITECTURES=86
+# NOTE: for RTX 3090 or later, reffer to https://developer.nvidia.com/cuda-gpus
 cd ..
 
 sleep 10
 
-TVM_BUILD_PATH="build-debug build-release" make -j8
+TVM_BUILD_PATH="build-debug" make -j8
+
+sleep 10
+
+TVM_BUILD_PATH="build-release" make -j8
 
 cd ../../..
 pip3 install python-dotenv
