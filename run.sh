@@ -22,6 +22,10 @@ time_cmd="/usr/bin/time"
 #     --input_model dolly-v2-3b \
 #     --timestamp ${epoch_time}
 
-python3 dolly-v2-3b.py \
-    --input_model dolly-v2-3b \
+# python3 dolly-v2-3b.py \
+#     --input_model dolly-v2-3b \
+#     --timestamp ${epoch_time}
+
+python3 gpt2.py \
+    --input_model gpt2 \
     --timestamp ${epoch_time}

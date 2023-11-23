@@ -16,7 +16,7 @@ import argparse
 import torch
 import torch.nn as nn
 from instruct_pipeline import InstructionTextGenerationPipeline
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AutoModel
 from transformers.activations import GELUActivation
 from transformers.models.gpt_neox.modeling_gpt_neox import (
     GPTNeoXRotaryEmbedding,
@@ -31,7 +31,7 @@ from accelerate import (
 import ecco
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--input_model", default="dolly-v2-3b")
+parser.add_argument("--input_model", default="gpt2")
 parser.add_argument(
     "--gpu_family", type=str, default="a2000", choices=["v100", "a10", "a100", "a2000"]
 )
@@ -51,7 +51,7 @@ logFormatter = logging.Formatter(
     "%(asctime)s " + "[%(threadName)-12.12s] " + "[%(levelname)-5.5s]  " + "%(message)s"
 )
 
-fileHandler = logging.FileHandler("dolly-v2-3b_{}.log".format(int(args.timestamp)))
+fileHandler = logging.FileHandler("gpt2_{}.log".format(int(args.timestamp)))
 fileHandler.setFormatter(logFormatter)
 fileHandler.setLevel(logging.DEBUG)
 
@@ -82,6 +82,8 @@ if (
     or args.input_model == "dolly-v2-13b"
 ):
     model_path_or_name = "databricks/{}".format(args.input_model)
+elif args.input_model == "gpt2":
+    model_path_or_name = args.input_model
 else:
     model_path_or_name = os.path.expanduser(os.path.expandvars(args.input_model))
 # config = AutoConfig.from_pretrained(model_path_or_name)
@@ -101,7 +103,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 device_map = None
 
-model = AutoModelForCausalLM.from_pretrained(
+model = AutoModel.from_pretrained(
     model_path_or_name,
     torch_dtype=torch.float32,
     device_map=device_map,
@@ -111,8 +113,6 @@ model.eval()
 
 if hasattr(model, "hf_device_map"):
     logging.info("device_map: {}".format(model.hf_device_map))
-
-generate_text = InstructionTextGenerationPipeline(model=model, tokenizer=tokenizer)
 
 # add autoTVM on GPU
 # ref: https://tvm.apache.org/docs/how_to/tune_with_autoscheduler/tune_network_cuda.html
@@ -124,9 +124,9 @@ from tvm import relay, auto_scheduler, runtime
 from tvm.contrib import graph_executor, pipeline_executor
 
 # Define the neural network and compilation target
-network = "dolly-v2-3b"
-batch_size = 2
-sequence_size = 1024
+network = "gpt2"
+batch_size = 2  # NOTE: bug, will relay import error if batch_size == 1
+sequence_size = 128
 layout = "NL"
 dtype = "float32"
 target = tvm.target.Target(
@@ -144,20 +144,22 @@ dynamic_to_static = True
 
 # prepare network
 query = "This is a dummy text to fill up the maximum sequence size of dolly-v2 model. "  # 20 tokens
-iter_times = math.ceil((sequence_size - 24) / 20)
+iter_times = math.ceil((sequence_size - 2) / 20)
 query = query * iter_times
 
 # generate sequence ids for model input
-model_inputs = generate_text.preprocess(query)
+model_inputs = tokenizer(query, return_tensors="pt")
 input_names = ["input_ids", "attention_mask"]
-logging.info(model_inputs[input_names[0]].shape)
-logging.debug(str(model_inputs[input_names[0]]))
+logging.info("input_ids: {}".format(str(model_inputs[input_names[0]].shape)))
+logging.info("model_inputs: {}".format(str(type(model_inputs))))
+logging.debug("model_inputs: {}".format(str(model_inputs)))
 if batch_size > 1:
     for input_name in input_names:
         model_inputs[input_name] = model_inputs[input_name].repeat(batch_size, 1)
-dummy_inputs = [model_inputs[input_name] for input_name in input_names]
+dummy_inputs = dict(model_inputs)
 batch_size = model_inputs["input_ids"].shape[0]
 sequence_size = model_inputs["input_ids"].shape[1]
+logging.debug("dummy_inputs: {}".format(str(dummy_inputs)))
 
 # trace model
 for para in model.parameters():
@@ -168,7 +170,7 @@ if not os.path.exists(traced_file):
     logging.info("Trace model...")
     scripted_model = torch.jit.trace(
         model,
-        dummy_inputs,
+        example_kwarg_inputs=dummy_inputs,
     )
     torch.jit.save(scripted_model, traced_file)
 # NOTE: bug? use reloaded traced model can solve int64 assert problem

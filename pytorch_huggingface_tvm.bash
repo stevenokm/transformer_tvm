@@ -72,8 +72,8 @@ if [ ! -f "config.cmake" ]; then
     done
 fi
 cmake .. \
-    -DCMAKE_CUDA_ARCHITECTURES=86
-# NOTE: for RTX 3090 or later, reffer to https://developer.nvidia.com/cuda-gpus
+    -DCMAKE_CUDA_ARCHITECTURES=61
+# NOTE: the setting is for GTX 1080ti or later, reffer to https://developer.nvidia.com/cuda-gpus
 cd ..
 cd build-debug/
 config_cmake_dict["USE_RELAY_DEBUG"]="ON"
@@ -83,8 +83,8 @@ if [ ! -f "config.cmake" ]; then
     done
 fi
 cmake .. \
-    -DCMAKE_CUDA_ARCHITECTURES=86
-# NOTE: for RTX 3090 or later, reffer to https://developer.nvidia.com/cuda-gpus
+    -DCMAKE_CUDA_ARCHITECTURES=61
+# NOTE: the setting is for GTX 1080ti or later, reffer to https://developer.nvidia.com/cuda-gpus
 cd ..
 
 sleep 10
